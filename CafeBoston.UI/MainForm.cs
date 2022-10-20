@@ -6,6 +6,7 @@ using System.Data;
 using System.Drawing;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -18,12 +19,25 @@ namespace CafeBoston.UI
         public MainForm()
         {
             InitializeComponent();
+            LoadSavedData();
             SeedSampleProducts();
             LoadTables();
         }
 
+        private void LoadSavedData()
+        {
+            try
+            {
+                string json = File.ReadAllText("data.json");
+                db = JsonSerializer.Deserialize<CafeData>(json);
+            }
+            catch (Exception) { }
+        }
+
         private void SeedSampleProducts()
         {
+            if (db.Product.Any()) return;
+
             db.Product.Add(new Product() { ProductName = "Cola", UnitPrice = 14.50m });
             db.Product.Add(new Product() { ProductName = "Tea", UnitPrice = 9m });
 
@@ -31,11 +45,11 @@ namespace CafeBoston.UI
 
         private void LoadTables()
         {
-            for (int i = 1; i <=db.TableCount; i++)
+            for (int i = 1; i <= db.TableCount; i++)
             {
                 var lvi = new ListViewItem($"Table {i}");
                 lvi.Tag = i;
-                lvi.ImageKey = "empty";
+                lvi.ImageKey = db.ActiveOrders.Any(x => x.TableNo == i) ? "full" : "empty";
                 lvwTables.Items.Add(lvi);
             }
         }
@@ -46,7 +60,7 @@ namespace CafeBoston.UI
             int tableNo = (int)selectedLvi.Tag;
 
             var order = db.ActiveOrders.FirstOrDefault(x => x.TableNo == tableNo);
-            if (order== null)
+            if (order == null)
             {
                 order = new Order() { TableNo = tableNo };
                 db.ActiveOrders.Add(order);
@@ -54,10 +68,27 @@ namespace CafeBoston.UI
             }
 
             var frmOrder = new OrderForm(db, order);
-            var dr =frmOrder.ShowDialog();
+            frmOrder.TableMoving += FrmOrder_TableMoving;
+            var dr = frmOrder.ShowDialog();
             if (dr == DialogResult.OK)
             {
                 selectedLvi.ImageKey = "empty";
+            }
+        }
+
+        private void FrmOrder_TableMoving(int oldTableNo, int newTableNo)
+        {
+            foreach (ListViewItem lvi in lvwTables.Items)
+            {
+                int tableNo = (int)lvi.Tag;
+                if (tableNo == oldTableNo)
+                {
+                    lvi.ImageKey = "empty";
+                }
+                else if (tableNo == newTableNo)
+                {
+                    lvi.ImageKey = "full";
+                }
             }
         }
 
@@ -70,6 +101,12 @@ namespace CafeBoston.UI
         {
             new ProductForm(db).ShowDialog();
 
+        }
+
+        private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            string json = JsonSerializer.Serialize(db);
+            File.WriteAllText("data.json", json);
         }
     }
 }
